@@ -36,11 +36,11 @@ rule topmed_imputation:
 rule RMarkdown_BasicQC:
     input:
         'data/{sample}.frq',
-        'data/{sample}.samplesout.imiss',
-        'data/{sample}.SNPsout.lmiss',
+        'data/{sample}.samplesout.log',
+        'data/{sample}.SNPsout.log',
         'data/{sample}.samplesout2.frq',
-        'data/{sample}.samplesout2.imiss',
-        'data/{sample}.hwefiltered.hwe',
+        'data/{sample}.samplesout2.log',
+        'data/{sample}.hwefiltered.log',
         'data/{sample}.duplicate_samples.txt'
     output:
         'results/{sample}.BasicQCSummary.html'
@@ -58,8 +58,8 @@ rule RMarkdown_PCA:
         'data/{sample}.PostBasicQC.bim',
         'data/{sample}.highLDexcluded.bim',
         'data/{sample}.ambiguousSNPs.txt',
-        'data/{sample}.prekinship.lmiss',
-        'data/{sample}.prekinship.frq',
+        'data/{sample}.prekinship.log',
+        'data/{sample}.prekinshipmaf.frq',
         'data/{sample}.related_d3.txt',
         'data/{sample}.unrelated.fam',
         'data/{sample}.prune.in',
@@ -134,12 +134,11 @@ rule remove_highmissing_samples:
         temp('data/{sample}.samplesout.bed'),
         temp('data/{sample}.samplesout.bim'),
         temp('data/{sample}.samplesout.fam'),
-        temp('data/{sample}.samplesout.imiss'), #summary stats for markdown
-        temp('data/{sample}.samplesout.lmiss')
+        temp('data/{sample}.samplesout.log'), #stats for markdown
     params:
         mindvalue = config['mind1']
     shell:
-        'plink --bfile data/{wildcards.sample}.idnorm --mind {params.mindvalue} --missing --make-bed --out data/{wildcards.sample}.samplesout'
+        'plink --bfile data/{wildcards.sample}.idnorm --mind {params.mindvalue} --make-bed --out data/{wildcards.sample}.samplesout'
 
 #remove SNPs with high rate of missingness across samples
 rule remove_highmissing_SNPs:
@@ -151,12 +150,11 @@ rule remove_highmissing_SNPs:
         temp('data/{sample}.SNPsout.bed'),
         temp('data/{sample}.SNPsout.bim'),
         temp('data/{sample}.SNPsout.fam'),
-        temp('data/{sample}.SNPsout.imiss'),
-        temp('data/{sample}.SNPsout.lmiss')
+        temp('data/{sample}.SNPsout.log'),
     params:
         genovalue = config['geno1']
     shell:
-        'plink --bfile data/{wildcards.sample}.samplesout --geno {params.genovalue} --missing --make-bed --out data/{wildcards.sample}.SNPsout'
+        'plink --bfile data/{wildcards.sample}.samplesout --geno {params.genovalue} --make-bed --out data/{wildcards.sample}.SNPsout'
 
 #remove SNPs with low minor allele frequency (only feed into to PCA not GWAS?)
 rule minor_allele_frequency_cutoff:
@@ -183,13 +181,15 @@ rule remove_highmissing_samples_2:
         temp('data/{sample}.samplesout2.bed'),
         temp('data/{sample}.samplesout2.bim'),
         temp('data/{sample}.samplesout2.fam'),
-        temp('data/{sample}.samplesout2.imiss'),
-        temp('data/{sample}.samplesout2.lmiss'),
+        temp('data/{sample}.samplesout2.log'),
         temp('data/{sample}.samplesout2.frq')
     params:
-        mindvalue = config['mind2']
+        mind2value = config['mind2']
     shell:
-        'plink --bfile data/{wildcards.sample}.MAFcutoff --mind {params.mindvalue} --missing --freq --make-bed --out data/{wildcards.sample}.samplesout2'
+        r'''
+        plink --bfile data/{wildcards.sample}.MAFcutoff --freq --out data/{wildcards.sample}.samplesout2
+        plink --bfile data/{wildcards.sample}.MAFcutoff --mind {params.mind2value} --make-bed --out data/{wildcards.sample}.samplesout2
+        '''
 
 #filter for HWE
 rule filter_hwe:
@@ -201,11 +201,11 @@ rule filter_hwe:
         temp('data/{sample}.hwefiltered.bed'),
         temp('data/{sample}.hwefiltered.bim'),
         temp('data/{sample}.hwefiltered.fam'),
-        temp('data/{sample}.hwefiltered.hwe')
+        temp('data/{sample}.hwefiltered.log')
     params:
         hwevalue = config['hwe']
     shell:
-        'plink --bfile data/{wildcards.sample}.samplesout2 --hardy --hwe {params.hwevalue} --make-bed --out data/{wildcards.sample}.hwefiltered'
+        'plink --bfile data/{wildcards.sample}.samplesout2 --hwe {params.hwevalue} --make-bed --out data/{wildcards.sample}.hwefiltered'
 
 #remove duplicates (king-dependent - possibly not required depending on data source)
 rule find_duplicates:
@@ -291,13 +291,12 @@ rule pre_kinship_filters:
         temp('data/{sample}.prekinship.bed'),
         temp('data/{sample}.prekinship.bim'),
         temp('data/{sample}.prekinship.fam'),
-        temp('data/{sample}.prekinship.imiss'),
-        temp('data/{sample}.prekinship.lmiss')
+        temp('data/{sample}.prekinship.log'),
     params:
         mafvalue = config['maf2'],
         genovalue = config['geno2']
     shell:
-        'plink --bfile data/{wildcards.sample}.ambSNPsremoved --missing --maf {params.mafvalue} --geno {params.genovalue} --make-bed --out data/{wildcards.sample}.prekinship'
+        'plink --bfile data/{wildcards.sample}.ambSNPsremoved --maf {params.mafvalue} --geno {params.genovalue} --make-bed --out data/{wildcards.sample}.prekinship'
 
 #Generate MAF stats for Markdown
 rule maf_graph_prekinship:
@@ -306,9 +305,9 @@ rule maf_graph_prekinship:
         'data/{sample}.prekinship.bim',
         'data/{sample}.prekinship.fam'
     output:
-        temp('data/{sample}.prekinship.frq')
+        temp('data/{sample}.prekinshipmaf.frq')
     shell:
-        'plink --bfile data/{wildcards.sample}.prekinship --freq --out data/{wildcards.sample}.prekinship'
+        'plink --bfile data/{wildcards.sample}.prekinship --freq --out data/{wildcards.sample}.prekinshipmaf'
 
 #Kinship testing (King)
 rule kinship_testing:
